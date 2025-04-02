@@ -1,7 +1,8 @@
 import {getShopAnalytics} from '@shopify/hydrogen';
-import {Outlet, useRouteError, isRouteErrorResponse} from '@remix-run/react';
+import {Outlet, useRouteError, isRouteErrorResponse, useLoaderData} from '@remix-run/react';
 import favicon from '~/assets/favicon.svg';
 import {FOOTER_QUERY, HEADER_QUERY} from '~/lib/fragments';
+import {getJoyConfigData, useJoyLoyalty} from "joyso-hydrogen-sdk";
 
 /**
  * This is important to avoid re-fetching root queries on sub-navigations
@@ -83,19 +84,20 @@ export async function loader(args) {
  * @param {LoaderFunctionArgs}
  */
 async function loadCriticalData({context}) {
-  const {storefront} = context;
+  const {storefront, session} = context;
 
-  const [header] = await Promise.all([
+  const [header, joyData] = await Promise.all([
     storefront.query(HEADER_QUERY, {
       cache: storefront.CacheLong(),
       variables: {
         headerMenuHandle: 'main-menu', // Adjust to your header menu handle
       },
     }),
+    getJoyConfigData({storefront, session, shopId: 'igUjjpJd1MUrpFhQYrjW'})
     // Add other queries here, so that they are loaded in parallel
   ]);
 
-  return {header};
+  return {header, ...joyData};
 }
 
 /**
@@ -128,6 +130,10 @@ function loadDeferredData({context}) {
 }
 
 export default function App() {
+  const data = useLoaderData();
+
+  useJoyLoyalty(data);
+
   return <Outlet />;
 }
 
