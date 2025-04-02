@@ -5,11 +5,12 @@ import {
   useOptimisticVariant,
   getProductOptions,
   getAdjacentAndFirstAvailableVariants,
-  useSelectedOptionInUrlParam,
+  useSelectedOptionInUrlParam, AnalyticsPageType,
 } from '@shopify/hydrogen';
 import {ProductPrice} from '~/components/ProductPrice';
 import {ProductImage} from '~/components/ProductImage';
 import {ProductForm} from '~/components/ProductForm';
+import {useJoyLoyaltyCalculator} from "joyso-hydrogen-sdk";
 
 /**
  * @type {MetaFunction<typeof loader>}
@@ -63,6 +64,9 @@ async function loadCriticalData({context, params, request}) {
 
   return {
     product,
+    analytics: {
+      pageType: AnalyticsPageType.product,
+    },
   };
 }
 
@@ -81,7 +85,7 @@ function loadDeferredData({context, params}) {
 
 export default function Product() {
   /** @type {LoaderReturnData} */
-  const {product} = useLoaderData();
+  const {product, analytics} = useLoaderData();
 
   // Optimistically selects a variant with given available variant information
   const selectedVariant = useOptimisticVariant(
@@ -101,6 +105,12 @@ export default function Product() {
 
   const {title, descriptionHtml} = product;
 
+  // 2. Initialize the calculator
+  useJoyLoyaltyCalculator({
+    product,
+    analytics,
+  });
+
   return (
     <div className="product">
       <ProductImage image={selectedVariant?.image} />
@@ -116,6 +126,7 @@ export default function Product() {
           selectedVariant={selectedVariant}
         />
         <br />
+        <div className="joy-points-calculator__block"></div>
         <br />
         <p>
           <strong>Description</strong>
@@ -144,44 +155,44 @@ export default function Product() {
 }
 
 const PRODUCT_VARIANT_FRAGMENT = `#graphql
-  fragment ProductVariant on ProductVariant {
+fragment ProductVariant on ProductVariant {
     availableForSale
     compareAtPrice {
-      amount
-      currencyCode
+        amount
+        currencyCode
     }
     id
     image {
-      __typename
-      id
-      url
-      altText
-      width
-      height
+        __typename
+        id
+        url
+        altText
+        width
+        height
     }
     price {
-      amount
-      currencyCode
+        amount
+        currencyCode
     }
     product {
-      title
-      handle
+        title
+        handle
     }
     selectedOptions {
-      name
-      value
+        name
+        value
     }
     sku
     title
     unitPrice {
-      amount
-      currencyCode
+        amount
+        currencyCode
     }
-  }
+}
 `;
 
 const PRODUCT_FRAGMENT = `#graphql
-  fragment Product on Product {
+fragment Product on Product {
     id
     title
     vendor
@@ -191,48 +202,69 @@ const PRODUCT_FRAGMENT = `#graphql
     encodedVariantExistence
     encodedVariantAvailability
     options {
-      name
-      optionValues {
         name
-        firstSelectableVariant {
-          ...ProductVariant
-        }
-        swatch {
-          color
-          image {
-            previewImage {
-              url
+        optionValues {
+            name
+            firstSelectableVariant {
+                ...ProductVariant
             }
-          }
+            swatch {
+                color
+                image {
+                    previewImage {
+                        url
+                    }
+                }
+            }
         }
-      }
+    }
+    # Need to add this if have not had it in the query
+    collections(first: 100) {
+        nodes {
+            title
+        }
+    }
+
+    # Need to add this if have not had it in the query
+    variants(first: 250) {
+        nodes {
+            ...ProductVariant
+            selectedOptions {
+                name
+                value
+            }
+            # Required for limitations
+            limitation: metafield(namespace: "custom", key: "limitation") {
+                value
+            }
+        }
     }
     selectedOrFirstAvailableVariant(selectedOptions: $selectedOptions, ignoreUnknownOptions: true, caseInsensitiveMatch: true) {
-      ...ProductVariant
+        ...ProductVariant
     }
     adjacentVariants (selectedOptions: $selectedOptions) {
-      ...ProductVariant
+        ...ProductVariant
     }
     seo {
-      description
-      title
+        description
+        title
     }
-  }
-  ${PRODUCT_VARIANT_FRAGMENT}
+}
+${PRODUCT_VARIANT_FRAGMENT}
 `;
 
 const PRODUCT_QUERY = `#graphql
-  query Product(
+query Product(
     $country: CountryCode
     $handle: String!
     $language: LanguageCode
     $selectedOptions: [SelectedOptionInput!]!
-  ) @inContext(country: $country, language: $language) {
+) @inContext(country: $country, language: $language) {
     product(handle: $handle) {
-      ...Product
+        ...Product
     }
-  }
-  ${PRODUCT_FRAGMENT}
+}
+${PRODUCT_FRAGMENT}
 `;
 
 /** @typedef {import('@shopify/remix-oxygen').LoaderFunctionArgs} LoaderFunctionArgs */
